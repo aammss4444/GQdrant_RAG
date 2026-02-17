@@ -1,0 +1,7 @@
+qdrant-client
+python-dotenv
+google-generativeai
+pypdf
+scikit-learn
+matplotlib
+pdfplumber
