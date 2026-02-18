@@ -21,7 +21,7 @@ genai.configure(api_key=GOOGLE_API_KEY)
 client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60)
 
 # Collection Configuration
-COLLECTION_NAME = "ai_pdf_collection"
+COLLECTION_NAME = "ai_structured_collection_v2"
 EMBEDDING_MODEL = "models/gemini-embedding-001"
 
 def get_embedding(text):
@@ -41,7 +41,7 @@ def search(query, limit=3):
         query_vector = get_embedding(query)
     except Exception as e:
         print(f"Error generating embedding: {e}")
-        return
+        return []
 
     print("Searching Qdrant...")
     try:
@@ -53,13 +53,21 @@ def search(query, limit=3):
         hits = search_result.points
 
         print(f"\nFound {len(hits)} results:")
+        results = []
         for i, hit in enumerate(hits):
             print(f"\n--- Result {i+1} (Score: {hit.score:.4f}) ---")
             print(f"Text: {hit.payload.get('text', 'N/A')}")
             print(f"Source: {hit.payload.get('source', 'N/A')}")
+            results.append({
+                "text": hit.payload.get('text', 'N/A'),
+                "source": hit.payload.get('source', 'N/A'),
+                "score": hit.score
+            })
+        return results
             
     except Exception as e:
         print(f"Error searching Qdrant: {e}")
+        return []
 
 def main():
     while True:

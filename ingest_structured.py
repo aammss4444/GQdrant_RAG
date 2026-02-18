@@ -4,6 +4,8 @@ import google.generativeai as genai
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
 from dotenv import load_dotenv
+import time
+import random
 
 # Load environment variables
 load_dotenv()
@@ -23,15 +25,16 @@ genai.configure(api_key=GOOGLE_API_KEY)
 client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60)
 
 # Collection Configuration
-COLLECTION_NAME = "ai_structured_collection"
+COLLECTION_NAME = "ai_structured_collection_v2"
 EMBEDDING_MODEL = "models/gemini-embedding-001"
 VECTOR_SIZE = 3072 
-PDF_PATH = "ai.pdf"
+PDF_PATH = "Artificial_Intelligence_Expanded_Detailed_Report.pdf"
 
-import time
+CHUNK_SIZE = 450
+CHUNK_OVERLAP = 80
 
-def get_embedding(text, retries=3):
-    """Generates embedding for the given text using Gemini API with retry logic."""
+def get_embedding(text, retries=5):
+    """Generates embedding with exponential backoff."""
     for attempt in range(retries):
         try:
             result = genai.embed_content(
@@ -39,122 +42,69 @@ def get_embedding(text, retries=3):
                 content=text,
                 task_type="retrieval_document"
             )
-            return result['embedding']
+            # Check if result is valid
+            if 'embedding' in result:
+                return result['embedding']
+            else:
+                # Handle cases where result might be empty (e.g. safety filter)
+                print(f"Warning: No embedding returned for text: {text[:50]}...")
+                return None
         except Exception as e:
-            if "429" in str(e):
-                print(f"Rate limit exceeded. Waiting 60s... (Attempt {attempt+1}/{retries})")
-                time.sleep(60)
+            if "429" in str(e) or "Resource exhausted" in str(e):
+                unique_wait = (2 ** attempt) + random.uniform(0, 5)
+                print(f"Rate limit hit. Waiting {unique_wait:.2f}s... (Attempt {attempt+1}/{retries})")
+                time.sleep(unique_wait)
             else:
                 print(f"Error generating embedding: {e}")
                 time.sleep(5)
     return None
 
-def extract_structured_content(pdf_path):
-    """Extracts text preserving structure (Headers vs Paragraphs)."""
-    structured_chunks = []
+def chunk_text(text, chunk_size, overlap):
+    """Splits text into chunks of `chunk_size` characters with `overlap`."""
+    if not text:
+        return []
     
-    with pdfplumber.open(pdf_path) as pdf:
-        current_section = "Introduction" # Default section
+    chunks = []
+    start = 0
+    text_len = len(text)
+    
+    while start < text_len:
+        end = start + chunk_size
+        chunk = text[start:end]
+        chunks.append(chunk)
         
-        for page_num, page in enumerate(pdf.pages):
-            # Extract words with their font sizes
-            words = page.extract_words(keep_blank_chars=True, use_text_flow=True)
-            
-            # Simple Heuristic: 
-            # 1. Calculate average font size of the page (roughly)
-            # 2. Anything significantly larger is a Header
-            if not words:
-                continue
-                
-            font_sizes = [w['bottom'] - w['top'] for w in words]
-            avg_size = sum(font_sizes) / len(font_sizes)
-            header_threshold = avg_size * 1.2  # 20% larger than average
-            
-            current_block_text = []
-            
-            # Iterate through words and group them
-            # This is a simplified approach. A more robust one might group by absolute Y position.
-            # Here we iterate line by line approximately.
-            
-            # Better approach: Extract text lines directly? 
-            # pdfplumber doesn't give line objects with font info directly easily without processing words.
-            # Let's use a simpler block iteration.
-            
-            text_lines = page.extract_text().split('\n')
-            # But extract_text loses font info.
-            
-            # Let's stick to word iteration or check characters.
-            # Actually, pdfplumber's `extract_table` is great for tables.
-            # For general text, let's just inspect lines.
-            
-            # Revised approach: Iterate chars to find line breaks and font sizes? Too slow.
-            # Let's use the 'top' coordinate to group words into lines.
-            
-            lines = {} # Y-coord -> [words]
-            for w in words:
-                top = round(w['top']) # Group by roughly same Y
-                if top not in lines:
-                    lines[top] = []
-                lines[top].append(w)
-            
-            sorted_y = sorted(lines.keys())
-            
-            for y in sorted_y:
-                line_words = lines[y]
-                # Reconstruct line text
-                line_text = " ".join([w['text'] for w in line_words])
-                
-                # Check max font size in this line
-                line_font_size = max([w['bottom'] - w['top'] for w in line_words])
-                
-                if line_font_size > header_threshold:
-                    # It's a Header!
-                    # 1. Save previous block if exists
-                    if current_block_text:
-                        chunk_text = " ".join(current_block_text)
-                        structured_chunks.append({
-                            "text": chunk_text,
-                            "type": "paragraph",
-                            "section": current_section,
-                            "page": page_num + 1
-                        })
-                        current_block_text = []
-                    
-                    # 2. Update current section
-                    current_section = line_text
-                    # We also add the header itself as a chunk? Or just metadata?
-                    # Let's add it as a chunk too, helpful for matching "Introduction".
-                    structured_chunks.append({
-                        "text": line_text,
-                        "type": "header",
-                        "section": current_section,
-                        "page": page_num + 1
-                    })
-                    
-                else:
-                    # It's a Paragraph line
-                    current_block_text.append(line_text)
-            
-            # End of page, save remaining block
-            if current_block_text:
-                 chunk_text = " ".join(current_block_text)
-                 structured_chunks.append({
-                    "text": chunk_text,
-                    "type": "paragraph",
-                    "section": current_section,
-                    "page": page_num + 1
-                })
-                
-    return structured_chunks
+        # Move start forward by (chunk_size - overlap)
+        start += (chunk_size - overlap)
+    
+    return chunks
+
+def extract_text_from_pdf(pdf_path):
+    """Extracts raw text from PDF."""
+    full_text = ""
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            try:
+                text = page.extract_text()
+                if text:
+                    full_text += text + "\n"
+            except Exception as e:
+                print(f"Error extracting text from page: {e}")
+    return full_text
 
 def main():
-    print(f"Processing {PDF_PATH} with structure detection...")
+    print(f"Processing {PDF_PATH} with Chunk Size {CHUNK_SIZE}, Overlap {CHUNK_OVERLAP}...")
     
     # 1. Extract
-    chunks = extract_structured_content(PDF_PATH)
-    print(f"Extracted {len(chunks)} structured chunks.")
+    print("Extracting text from PDF...")
+    raw_text = extract_text_from_pdf(PDF_PATH)
+    print(f"Extracted {len(raw_text)} characters.")
     
-    # 2. Re-create Collection
+    # 2. Chunk
+    print("Chunking text...")
+    text_chunks = chunk_text(raw_text, CHUNK_SIZE, CHUNK_OVERLAP)
+    print(f"Created {len(text_chunks)} chunks.")
+    
+    # 3. Re-create Collection
     if client.collection_exists(COLLECTION_NAME):
         print(f"Deleting existing collection: {COLLECTION_NAME}")
         client.delete_collection(COLLECTION_NAME)
@@ -165,50 +115,63 @@ def main():
         vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
     )
 
-    # 3. Generate Embeddings & Upsert
+    # 4. Generate Embeddings & Upsert
     points = []
     print("Generating embeddings...")
     
-    BATCH_SIZE = 50
-    for idx, chunk in enumerate(chunks):
+    BATCH_SIZE = 20 # Smaller batch size to be safe
+    
+    for idx, chunk_text_content in enumerate(text_chunks):
         try:
-            # Contextualize text for embedding: "Section: Introduction. Content: ..."
-            embedding_text = f"Section: {chunk['section']}. {chunk['text']}"
-            
-            embedding = get_embedding(embedding_text)
+            # Contextualize? Just strict chunking requested.
+            # But let's keep it clean.
+            embedding = get_embedding(chunk_text_content)
             
             if embedding:
                 point = PointStruct(
                     id=idx,
                     vector=embedding,
-                    payload=chunk
+                    payload={"text": chunk_text_content, "source": PDF_PATH}
                 )
                 points.append(point)
                 
-                # Rate limit: Sleep to avoid hitting API limits
+                # Moderate sleep to avoid bursting too hard
                 time.sleep(2) 
             else:
                 print(f"Skipping chunk {idx} due to embedding failure.")
 
             if (idx + 1) % 10 == 0:
-                print(f"Processed {idx + 1}/{len(chunks)} chunks.")
+                print(f"Processed {idx + 1}/{len(text_chunks)} chunks.")
                 
         except Exception as e:
             print(f"Error processing chunk {idx}: {e}")
 
-    # 4. Upsert
+    # 5. Upsert
     if points:
         print(f"Upserting {len(points)} points to Qdrant...")
+        # DEBUG: Check embedding dimension
+        if points:
+            dim = len(points[0].vector)
+            print(f"DEBUG: Embedding dimension: {dim}")
+            if dim != VECTOR_SIZE:
+                print(f"ERROR: Dimension mismatch! Expected {VECTOR_SIZE}, got {dim}")
+        
         for i in range(0, len(points), BATCH_SIZE):
             batch = points[i:i + BATCH_SIZE]
-            client.upsert(
-                collection_name=COLLECTION_NAME,
-                wait=True,
-                points=batch
-            )
-            print(f"Upserted batch {i // BATCH_SIZE + 1}")
+            try:
+                client.upsert(
+                    collection_name=COLLECTION_NAME,
+                    wait=True,
+                    points=batch
+                )
+                print(f"Upserted batch {i // BATCH_SIZE + 1}")
+            except Exception as e:
+                print(f"Error upserting batch {i // BATCH_SIZE + 1}: {e}")
+            time.sleep(1) # Sleep between upserts
             
-        print("Done! Collection 'ai_structured_collection' is ready.")
+        print("Done! Collection populated.")
+    else:
+        print("No points to upsert.")
 
 if __name__ == "__main__":
     try:

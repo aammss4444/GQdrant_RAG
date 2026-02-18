@@ -5,3 +5,7 @@ pypdf
 scikit-learn
 matplotlib
 pdfplumber
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
