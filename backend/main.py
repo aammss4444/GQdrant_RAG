@@ -5,6 +5,7 @@ from .database import SessionLocal, engine, Base, Conversation, Message
 from . import database
 import sys
 import os
+import time
 
 # Add parent directory to sys.path to import retrieve.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -100,25 +101,36 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
         # Assuming retrieve.py is modified to return a list of dicts.
         
         # Let's actually generate a response using Gemini if possible, but retrieve.py currently only retrieves.
-        # Implementation plan said: "Handles user messages, performs RAG using retrieve.py, and returns bot response."
-        # We need to add generation logic here or in `retrieve.py`.
-        # `retrieve.py` has `genai` configured.
-        
-        try:
-           model = retrieve.genai.GenerativeModel('gemini-2.5-pro')
-        except:
-           try:
-               model = retrieve.genai.GenerativeModel('gemini-1.5-pro')
-           except:
-               model = retrieve.genai.GenerativeModel('gemini-1.5-flash')
-           
         prompt = f"Answer the user query based on the following context:\n\n{context}\n\nQuery: {user_message}"
-        response = model.generate_content(prompt)
+        
+        response = None
+        last_error = None
+        # Try models in order of preference/cost
+        # Removed gemini-2.5-pro as it doesn't exist yet
+        for model_name in ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash']:
+            try:
+                print(f"Generating content with model: {model_name} (VERIFIED NEW CODE)")
+                model = retrieve.genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                if response:
+                    break
+            except Exception as e:
+                print(f"Error generating with {model_name}: {e}")
+                last_error = e
+                time.sleep(1) # Brief pause before retry
+                # Continue to next model
+        
+        if not response:
+            raise last_error if last_error else Exception("Failed to generate content with any model")
+            
         bot_response = response.text
         
     except Exception as e:
+        import traceback
+        tb_str = traceback.format_exc()
         print(f"Error during RAG/Generation: {e}")
-        bot_response = "I'm sorry, I encountered an error processing your request."
+        print(tb_str)
+        bot_response = f"I'm sorry, I encountered an error: {str(e)}\n\nTraceback:\n{tb_str}"
 
     # Save bot message
     db_bot_message = Message(conversation_id=conversation_id, sender="bot", content=bot_response)

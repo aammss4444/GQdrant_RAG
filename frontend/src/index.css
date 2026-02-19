@@ -1,12 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&display=swap');
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 body {
-  font-family: 'Comfortaa', cursive, sans-serif;
-  @apply bg-gray-900 text-white;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  @apply bg-white text-gray-800;
 }
 
 /* Custom Scrollbar for Webkit */
@@ -15,14 +11,14 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f2937; 
+  background: #1f2937;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4b5563; 
+  background: #4b5563;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280; 
+  background: #6b7280;
 }
