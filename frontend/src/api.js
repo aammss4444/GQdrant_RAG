@@ -13,6 +13,7 @@ export const sendMessage = async (message, conversationId, file = null) => {
     }
     const response = await axios.post(`${API_URL}/chat`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000, // 2 minute timeout for PDF processing
     });
     return response.data;
 };

@@ -65,15 +65,24 @@ class ConversationSchema(BaseModel):
         orm_mode = True
 
 
+MAX_PDF_CHARS = 8000  # Limit PDF text to avoid slow Gemini responses
+
 def extract_pdf_text(file_bytes: bytes) -> str:
-    """Extract text from PDF bytes using pypdf."""
+    """Extract text from PDF bytes using pypdf, truncated to MAX_PDF_CHARS."""
     reader = PdfReader(io.BytesIO(file_bytes))
     pages_text = []
+    total_len = 0
     for i, page in enumerate(reader.pages):
         text = page.extract_text()
         if text:
             pages_text.append(f"[Page {i+1}]\n{text}")
-    return "\n\n".join(pages_text)
+            total_len += len(text)
+            if total_len >= MAX_PDF_CHARS:
+                break
+    full_text = "\n\n".join(pages_text)
+    if len(full_text) > MAX_PDF_CHARS:
+        full_text = full_text[:MAX_PDF_CHARS] + "\n\n[... truncated for speed ...]"
+    return full_text
 
 
 @app.post("/api/chat")
@@ -126,14 +135,13 @@ async def chat(
         # Construct context from search results
         rag_context = "\n\n".join([f"Source: {res['source']}\nContent: {res['text']}" for res in search_results])
 
-        # Build the full prompt with both RAG context and PDF context
+        # Build the full prompt — skip RAG context when PDF is attached for speed
         prompt_parts = []
         prompt_parts.append("Answer the user query based on the following context:\n")
 
         if pdf_context:
             prompt_parts.append(f"--- Attached PDF Content ---\n{pdf_context}\n--- End of PDF ---\n")
-
-        if rag_context:
+        elif rag_context:
             prompt_parts.append(f"--- Knowledge Base Context ---\n{rag_context}\n--- End of Knowledge Base ---\n")
 
         prompt_parts.append(f"Query: {user_message}")
