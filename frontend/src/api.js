@@ -2,10 +2,17 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:8000/api';
 
-export const sendMessage = async (message, conversationId) => {
-    const response = await axios.post(`${API_URL}/chat`, {
-        message,
-        conversation_id: conversationId,
+export const sendMessage = async (message, conversationId, file = null) => {
+    const formData = new FormData();
+    formData.append('message', message);
+    if (conversationId) {
+        formData.append('conversation_id', conversationId);
+    }
+    if (file) {
+        formData.append('file', file);
+    }
+    const response = await axios.post(`${API_URL}/chat`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
 };

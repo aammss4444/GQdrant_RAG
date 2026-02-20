@@ -45,14 +45,20 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (text) => {
+  const handleSendMessage = async (text, file = null) => {
     // Add user message optimistically
-    const tempMessage = { id: Date.now(), sender: 'user', content: text, created_at: new Date().toISOString() };
+    const tempMessage = {
+      id: Date.now(),
+      sender: 'user',
+      content: text,
+      created_at: new Date().toISOString(),
+      attachment: file ? file.name : null,
+    };
     setMessages((prev) => [...prev, tempMessage]);
     setLoading(true);
 
     try {
-      const response = await sendMessage(text, currentConversationId);
+      const response = await sendMessage(text, currentConversationId, file);
 
       // Update conversation ID if it was a new chat
       if (!currentConversationId) {
@@ -68,9 +74,6 @@ function App() {
         created_at: new Date().toISOString()
       };
       setMessages((prev) => [...prev, botMessage]);
-
-      // If we are in an existing chat, the list of messages is updated.
-      // If we started a new chat, we need to ensure the messages are preserved.
 
     } catch (error) {
       console.error("Failed to send message", error);

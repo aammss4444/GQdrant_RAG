@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import MessageInput from './MessageInput';
-import { User, Bot } from 'lucide-react';
+import { User, Bot, FileText } from 'lucide-react';
 import BotLogo from './BotLogo'; // Import the new logo component
 
 const ChatWindow = ({ messages, onSendMessage, loading }) => {
@@ -24,6 +24,7 @@ const ChatWindow = ({ messages, onSendMessage, loading }) => {
                                 <BotLogo className="w-16 h-16 text-blue-500" />
                             </div>
                             <h2 className="text-2xl font-bold text-gray-800 mb-2">How can I help you today?</h2>
+                            <p className="text-gray-400 text-sm">You can also attach a PDF to ask questions about it</p>
                         </div>
                     ) : (
                         messages.map((msg, index) => (
@@ -35,12 +36,18 @@ const ChatWindow = ({ messages, onSendMessage, loading }) => {
                                             <BotLogo className="w-5 h-5" />
                                         </div>
                                     )}
-                                    {/* User Icon - Optional/Not in typical ChatGPT for user, usually just avatar or nothing. Image shows bubbles. */}
 
                                     <div className={`p-4 rounded-xl text-[15px] leading-7 ${msg.sender === 'user'
                                         ? 'bg-blue-200 text-gray-900'
                                         : 'bg-blue-100 text-gray-900'
                                         }`}>
+                                        {/* PDF attachment badge */}
+                                        {msg.attachment && (
+                                            <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-blue-300/40">
+                                                <FileText size={14} className="text-blue-600" />
+                                                <span className="text-xs font-medium text-blue-700 truncate max-w-[200px]">{msg.attachment}</span>
+                                            </div>
+                                        )}
                                         <p className="whitespace-pre-wrap">{msg.content}</p>
                                     </div>
                                 </div>
