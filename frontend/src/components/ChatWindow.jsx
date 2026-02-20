@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import MessageInput from './MessageInput';
 import { User, Bot } from 'lucide-react';
+import BotLogo from './BotLogo'; // Import the new logo component
 
 const ChatWindow = ({ messages, onSendMessage, loading }) => {
     const messagesEndRef = useRef(null);
@@ -20,7 +21,7 @@ const ChatWindow = ({ messages, onSendMessage, loading }) => {
                     {messages.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-[70vh] text-center opacity-80 animate-fade-in">
                             <div className="bg-white p-4 rounded-full shadow-sm mb-4 border border-gray-100">
-                                <Bot size={48} className="text-gray-300" />
+                                <BotLogo className="w-16 h-16 text-blue-500" />
                             </div>
                             <h2 className="text-2xl font-bold text-gray-800 mb-2">How can I help you today?</h2>
                         </div>
@@ -30,14 +31,14 @@ const ChatWindow = ({ messages, onSendMessage, loading }) => {
                                 <div className={`flex max-w-[85%] md:max-w-[75%] gap-4 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                                     {/* Bot Icon */}
                                     {msg.sender === 'bot' && (
-                                        <div className="w-8 h-8 rounded-sm flex items-center justify-center flex-shrink-0 bg-green-500 text-white">
-                                            <Bot size={20} />
+                                        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-gray-200 bg-white flex items-center justify-center">
+                                            <BotLogo className="w-5 h-5" />
                                         </div>
                                     )}
                                     {/* User Icon - Optional/Not in typical ChatGPT for user, usually just avatar or nothing. Image shows bubbles. */}
 
                                     <div className={`p-4 rounded-xl text-[15px] leading-7 ${msg.sender === 'user'
-                                        ? 'bg-blue-600 text-white'
+                                        ? 'bg-blue-200 text-gray-900'
                                         : 'bg-blue-100 text-gray-900'
                                         }`}>
                                         <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -50,8 +51,8 @@ const ChatWindow = ({ messages, onSendMessage, loading }) => {
                     {loading && (
                         <div className="flex w-full justify-start">
                             <div className="flex max-w-[85%] md:max-w-[75%] gap-4 flex-row">
-                                <div className="w-8 h-8 rounded-sm flex items-center justify-center flex-shrink-0 bg-green-500 text-white">
-                                    <Bot size={20} />
+                                <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-gray-200 bg-white flex items-center justify-center">
+                                    <BotLogo className="w-5 h-5" />
                                 </div>
                                 <div className="bg-blue-100 p-4 rounded-xl">
                                     <div className="flex gap-1.5 items-center h-5 px-1">
