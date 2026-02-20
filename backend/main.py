@@ -129,22 +129,43 @@ async def chat(
     db.add(db_message)
     db.commit()
 
+    # Load conversation history (last 10 messages for context)
+    history_messages = (
+        db.query(Message)
+        .filter(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.asc())
+        .all()
+    )
+    # Build chat history string (exclude the current message, keep last 10 pairs)
+    chat_history = ""
+    history_list = history_messages[:-1]  # exclude the message we just added
+    if history_list:
+        recent = history_list[-20:]  # last 20 messages (~10 pairs)
+        history_lines = []
+        for msg in recent:
+            role = "User" if msg.sender == "user" else "Assistant"
+            history_lines.append(f"{role}: {msg.content}")
+        chat_history = "\n".join(history_lines)
+
     # Get RAG response
     try:
         search_results = retrieve.search(user_message)
         # Construct context from search results
         rag_context = "\n\n".join([f"Source: {res['source']}\nContent: {res['text']}" for res in search_results])
 
-        # Build the full prompt — skip RAG context when PDF is attached for speed
+        # Build the full prompt
         prompt_parts = []
-        prompt_parts.append("Answer the user query based on the following context:\n")
+        prompt_parts.append("You are a helpful assistant. Answer the user query based on the following context.\n")
+
+        if chat_history:
+            prompt_parts.append(f"--- Conversation History ---\n{chat_history}\n--- End of History ---\n")
 
         if pdf_context:
             prompt_parts.append(f"--- Attached PDF Content ---\n{pdf_context}\n--- End of PDF ---\n")
         elif rag_context:
             prompt_parts.append(f"--- Knowledge Base Context ---\n{rag_context}\n--- End of Knowledge Base ---\n")
 
-        prompt_parts.append(f"Query: {user_message}")
+        prompt_parts.append(f"User: {user_message}")
         prompt = "\n".join(prompt_parts)
 
         response = None

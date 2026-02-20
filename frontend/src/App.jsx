@@ -8,6 +8,7 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('ask');
 
   useEffect(() => {
     loadConversations();
@@ -116,13 +117,27 @@ function App() {
         onSelect={handleSelectConversation}
         onNewChat={handleNewChat}
         onDelete={handleDeleteConversation}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
       <div className="flex-1 flex flex-col h-full relative">
-        <ChatWindow
-          messages={messages}
-          onSendMessage={handleSendMessage}
-          loading={loading}
-        />
+        {activeTab === 'ask' ? (
+          <ChatWindow
+            messages={messages}
+            onSendMessage={handleSendMessage}
+            loading={loading}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full bg-white text-center px-8">
+            <div className="w-20 h-20 rounded-2xl bg-blue-50 flex items-center justify-center mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" /></svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Knowledge Base</h2>
+            <p className="text-gray-400 text-sm max-w-md leading-relaxed">
+              Your uploaded documents and knowledge sources will appear here. This feature is coming soon.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
