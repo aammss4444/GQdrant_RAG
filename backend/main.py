@@ -98,19 +98,19 @@ class MessageSchema(BaseModel):
     id: int
     sender: str
     content: str
-    created_at: str
+    created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ConversationSchema(BaseModel):
     id: int
     title: str
-    created_at: str
+    created_at: datetime
     messages: List[MessageSchema] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserCreate(BaseModel):
