@@ -117,6 +117,12 @@ class UserCreate(BaseModel):
     email: str
     password: str
 
+class UserResponse(BaseModel):
+    email: str
+
+    class Config:
+        from_attributes = True
+
 MAX_PDF_CHARS = 8000  # Limit PDF text to avoid slow Gemini responses
 
 @app.post("/api/auth/signup")
@@ -141,6 +147,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         )
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/api/auth/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 def extract_pdf_text(file_bytes: bytes) -> str:
     """Extract text from PDF bytes using pypdf, truncated to MAX_PDF_CHARS."""

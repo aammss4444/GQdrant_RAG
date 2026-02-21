@@ -2,7 +2,7 @@ import React from 'react';
 import { PlusCircle, MessageSquare, Trash2, MessagesSquare, BookOpen, LogOut } from 'lucide-react';
 import { logout } from '../api';
 
-const Sidebar = ({ conversations, currentId, onSelect, onNewChat, onDelete, activeTab, onTabChange }) => {
+const Sidebar = ({ conversations, currentId, onSelect, onNewChat, onDelete, activeTab, onTabChange, userEmail }) => {
 
     return (
         <div className="w-[260px] bg-slate-900 border-r border-slate-800 flex flex-col h-full shrink-0 text-slate-100 transition-all duration-300 font-sans">
@@ -89,11 +89,11 @@ const Sidebar = ({ conversations, currentId, onSelect, onNewChat, onDelete, acti
             </div>
 
             <div className="p-3 border-t border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-3 p-3 rounded-md text-sm text-white flex-1">
-                    <div className="w-8 h-8 rounded bg-green-600 flex items-center justify-center text-white font-bold">
-                        U
+                <div className="flex items-center gap-3 p-3 rounded-md text-sm text-white flex-1 overflow-hidden">
+                    <div className="w-8 h-8 shrink-0 rounded bg-green-600 flex items-center justify-center text-white font-bold uppercase">
+                        {userEmail ? userEmail.charAt(0) : 'U'}
                     </div>
-                    <div className="font-medium">User</div>
+                    <div className="font-medium truncate">{userEmail || 'User'}</div>
                 </div>
                 <button
                     onClick={logout}

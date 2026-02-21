@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
-import { getConversations, getConversation, sendMessage, deleteConversation } from './api';
+import { getConversations, getConversation, sendMessage, deleteConversation, getUser } from './api';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 
@@ -20,10 +20,21 @@ function ChatApp() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('ask');
+  const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
+    loadUser();
     loadConversations();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const userData = await getUser();
+      setUserEmail(userData.email);
+    } catch (error) {
+      console.error("Failed to load user", error);
+    }
+  };
 
   useEffect(() => {
     if (currentConversationId) {
@@ -128,6 +139,7 @@ function ChatApp() {
         onDelete={handleDeleteConversation}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        userEmail={userEmail}
       />
       <div className="flex-1 flex flex-col h-full relative">
         {activeTab === 'ask' ? (

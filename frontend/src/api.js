@@ -34,6 +34,11 @@ export const signup = async (email, password) => {
     return response.data;
 };
 
+export const getUser = async () => {
+    const response = await api.get('/auth/me');
+    return response.data;
+};
+
 export const sendMessage = async (message, conversationId, file = null) => {
     const formData = new FormData();
     formData.append('message', message);
