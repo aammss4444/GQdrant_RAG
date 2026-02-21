@@ -35,12 +35,12 @@ const Sidebar = ({ conversations, currentId, onSelect, onNewChat, onDelete, acti
             <div className="flex-1 overflow-y-auto px-2">
                 {activeTab === 'ask' ? (
                     <>
-                        <div className="p-3">
+                        <div className="p-3 pb-2">
                             <button
                                 onClick={onNewChat}
-                                className="w-full flex items-center gap-3 px-3 py-3 rounded-md border border-slate-700 bg-slate-800 hover:bg-slate-700 transition-colors text-sm text-left mb-2 text-white shadow-sm"
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-slate-700/60 bg-slate-800 hover:bg-slate-700 hover:border-slate-600 transition-all duration-200 text-[13px] font-medium text-slate-200 hover:text-white shadow-sm group"
                             >
-                                <PlusCircle size={16} />
+                                <PlusCircle size={15} className="text-blue-400 group-hover:text-blue-300 transition-colors" />
                                 <span>New chat</span>
                             </button>
                         </div>
