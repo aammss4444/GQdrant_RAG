@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Send, Paperclip, X, FileText } from 'lucide-react';
+import { Send, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react';
 
 const MessageInput = ({ onSendMessage, disabled }) => {
     const [text, setText] = useState('');
@@ -27,10 +27,10 @@ const MessageInput = ({ onSendMessage, disabled }) => {
 
     const handleFileChange = (e) => {
         const selected = e.target.files[0];
-        if (selected && selected.type === 'application/pdf') {
+        if (selected && (selected.type === 'application/pdf' || selected.type.startsWith('image/'))) {
             setFile(selected);
         } else if (selected) {
-            alert('Please select a PDF file.');
+            alert('Please select a PDF or an image file.');
             e.target.value = '';
         }
     };
@@ -48,7 +48,7 @@ const MessageInput = ({ onSendMessage, disabled }) => {
             {file && (
                 <div className="flex items-center gap-2 mb-2 px-1">
                     <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-700 max-w-xs">
-                        <FileText size={16} className="flex-shrink-0 text-blue-500" />
+                        {file.type?.startsWith('image/') ? <ImageIcon size={16} className="flex-shrink-0 text-blue-500" /> : <FileText size={16} className="flex-shrink-0 text-blue-500" />}
                         <span className="truncate font-medium">{file.name}</span>
                         <span className="text-blue-400 text-xs flex-shrink-0">
                             ({(file.size / 1024).toFixed(0)} KB)
@@ -71,7 +71,7 @@ const MessageInput = ({ onSendMessage, disabled }) => {
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
-                    accept=".pdf,application/pdf"
+                    accept=".pdf,application/pdf,image/*"
                     className="hidden"
                 />
 
@@ -81,7 +81,7 @@ const MessageInput = ({ onSendMessage, disabled }) => {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={disabled}
                     className="p-3 rounded-xl text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-50 transition-colors flex-shrink-0"
-                    title="Attach PDF"
+                    title="Attach file"
                 >
                     <Paperclip size={20} />
                 </button>
@@ -93,7 +93,7 @@ const MessageInput = ({ onSendMessage, disabled }) => {
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={file ? "Ask about this PDF..." : "Send a message..."}
+                        placeholder={file ? (file.type?.startsWith('image/') ? "Ask about this image..." : "Ask about this PDF...") : "Send a message..."}
                         disabled={disabled}
                         className="w-full bg-gray-100 text-gray-900 rounded-xl py-4 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 border border-gray-200"
                     />

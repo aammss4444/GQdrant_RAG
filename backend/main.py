@@ -96,18 +96,35 @@ async def chat(
     has_attachment = False
     attachment_name = None
     pdf_context = ""
+    image_parts = None
 
-    # Extract PDF text if a file was uploaded
-    if file and file.filename and file.filename.lower().endswith(".pdf"):
-        has_attachment = True
-        attachment_name = file.filename
-        try:
-            file_bytes = await file.read()
-            pdf_context = extract_pdf_text(file_bytes)
-            print(f"Extracted {len(pdf_context)} chars from PDF: {attachment_name}")
-        except Exception as e:
-            print(f"Error extracting PDF text: {e}")
-            pdf_context = f"[Error reading PDF: {e}]"
+    # Handle uploaded file
+    if file and file.filename:
+        filename_lower = file.filename.lower()
+        if filename_lower.endswith(".pdf"):
+            has_attachment = True
+            attachment_name = file.filename
+            try:
+                file_bytes = await file.read()
+                pdf_context = extract_pdf_text(file_bytes)
+                print(f"Extracted {len(pdf_context)} chars from PDF: {attachment_name}")
+            except Exception as e:
+                print(f"Error extracting PDF text: {e}")
+                pdf_context = f"[Error reading PDF: {e}]"
+        elif filename_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif")):
+            has_attachment = True
+            attachment_name = file.filename
+            try:
+                file_bytes = await file.read()
+                image_parts = [
+                    {
+                        "mime_type": file.content_type or "image/jpeg",
+                        "data": file_bytes
+                    }
+                ]
+                print(f"Loaded image: {attachment_name}")
+            except Exception as e:
+                print(f"Error reading image: {e}")
 
     # Create new conversation if not provided
     if not conversation_id:
@@ -168,13 +185,17 @@ async def chat(
         prompt_parts.append(f"User: {user_message}")
         prompt = "\n".join(prompt_parts)
 
+        contents = [prompt]
+        if image_parts:
+            contents.extend(image_parts)
+
         response = None
         last_error = None
         for model_name in ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash']:
             try:
                 print(f"Generating content with model: {model_name}")
                 model = retrieve.genai.GenerativeModel(model_name)
-                response = model.generate_content(prompt)
+                response = model.generate_content(contents)
                 if response:
                     break
             except Exception as e:
