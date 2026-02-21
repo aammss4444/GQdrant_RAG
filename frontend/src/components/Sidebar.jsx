@@ -1,5 +1,6 @@
 import React from 'react';
-import { PlusCircle, MessageSquare, Trash2, MessagesSquare, BookOpen } from 'lucide-react';
+import { PlusCircle, MessageSquare, Trash2, MessagesSquare, BookOpen, LogOut } from 'lucide-react';
+import { logout } from '../api';
 
 const Sidebar = ({ conversations, currentId, onSelect, onNewChat, onDelete, activeTab, onTabChange }) => {
 
@@ -88,13 +89,20 @@ const Sidebar = ({ conversations, currentId, onSelect, onNewChat, onDelete, acti
                 )}
             </div>
 
-            <div className="p-3 border-t border-slate-800">
-                <div className="flex items-center gap-3 p-3 rounded-md hover:bg-slate-800 cursor-pointer text-sm text-white transition-colors">
+            <div className="p-3 border-t border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-3 p-3 rounded-md text-sm text-white flex-1">
                     <div className="w-8 h-8 rounded bg-green-600 flex items-center justify-center text-white font-bold">
                         U
                     </div>
                     <div className="font-medium">User</div>
                 </div>
+                <button
+                    onClick={logout}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+                    title="Logout"
+                >
+                    <LogOut size={18} />
+                </button>
             </div>
         </div>
     );

@@ -1,8 +1,12 @@
-from fastapi import FastAPI, HTTPException, Depends, Form, File, UploadFile
+from fastapi import FastAPI, HTTPException, Depends, Form, File, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from .database import SessionLocal, engine, Base, Conversation, Message
+from .database import SessionLocal, engine, Base, Conversation, Message, User
 from . import database
+import bcrypt
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 import sys
 import os
 import io
@@ -43,6 +47,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# JWT and Security variables
+SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-should-be-in-env")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+
+def verify_password(plain_password, hashed_password):
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+def get_password_hash(password):
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
 # Dependency
 def get_db():
     db = SessionLocal()
@@ -50,6 +75,24 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
 
 class MessageSchema(BaseModel):
     id: int
@@ -70,7 +113,34 @@ class ConversationSchema(BaseModel):
         orm_mode = True
 
 
+class UserCreate(BaseModel):
+    email: str
+    password: str
+
 MAX_PDF_CHARS = 8000  # Limit PDF text to avoid slow Gemini responses
+
+@app.post("/api/auth/signup")
+def signup(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    hashed_password = get_password_hash(user.password)
+    new_user = User(email=user.email, password_hash=hashed_password)
+    db.add(new_user)
+    db.commit()
+    return {"message": "User created successfully"}
+
+@app.post("/api/auth/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == form_data.username).first()  # form_data.username will be the email
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 def extract_pdf_text(file_bytes: bytes) -> str:
     """Extract text from PDF bytes using pypdf, truncated to MAX_PDF_CHARS."""
@@ -96,6 +166,7 @@ async def chat(
     conversation_id: Optional[int] = Form(None),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     user_message = message
     has_attachment = False
@@ -145,13 +216,13 @@ async def chat(
 
     # Create new conversation if not provided
     if not conversation_id:
-        conversation = Conversation(title=user_message[:30] + "...")
+        conversation = Conversation(title=user_message[:30] + "...", user_id=current_user.id)
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
         conversation_id = conversation.id
     else:
-        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -250,20 +321,20 @@ async def chat(
     }
 
 @app.get("/api/conversations", response_model=List[ConversationSchema])
-def get_conversations(db: Session = Depends(get_db)):
-    conversations = db.query(Conversation).order_by(Conversation.created_at.desc()).all()
+def get_conversations(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conversations = db.query(Conversation).filter(Conversation.user_id == current_user.id).order_by(Conversation.created_at.desc()).all()
     return conversations
 
 @app.get("/api/conversations/{conversation_id}", response_model=ConversationSchema)
-def get_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+def get_conversation(conversation_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 @app.delete("/api/conversations/{conversation_id}")
-def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+def delete_conversation(conversation_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     db.delete(conversation)

@@ -1,9 +1,20 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import ChatWindow from './components/ChatWindow';
 import { getConversations, getConversation, sendMessage, deleteConversation } from './api';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
 
-function App() {
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
+function ChatApp() {
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -36,8 +47,6 @@ function App() {
     try {
       const data = await getConversation(id);
       // Backend returns conversation object with messages
-      // We need to ensure backend serialization includes messages.
-      // My backend `ConversationSchema` has `messages: List[MessageSchema] = []` so it should work.
       setMessages(data.messages || []);
     } catch (error) {
       console.error("Failed to load messages", error);
@@ -140,6 +149,25 @@ function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <ChatApp />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </Router>
   );
 }
 
