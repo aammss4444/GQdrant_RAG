@@ -27,7 +27,7 @@ client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60)
 # Collection Configuration
 COLLECTION_NAME = "ai_structured_collection_v2"
 EMBEDDING_MODEL = "models/gemini-embedding-001"
-VECTOR_SIZE = 3072 
+VECTOR_SIZE = 768 
 PDF_PATH = "Artificial_Intelligence_Expanded_Detailed_Report.pdf"
 
 CHUNK_SIZE = 450
@@ -44,7 +44,10 @@ def get_embedding(text, retries=5):
             )
             # Check if result is valid
             if 'embedding' in result:
-                return result['embedding']
+                embedding = result['embedding']
+                if len(embedding) > VECTOR_SIZE:
+                    embedding = embedding[:VECTOR_SIZE]
+                return embedding
             else:
                 # Handle cases where result might be empty (e.g. safety filter)
                 print(f"Warning: No embedding returned for text: {text[:50]}...")

@@ -7,6 +7,11 @@ import sys
 import os
 import io
 import time
+import pytesseract
+from PIL import Image
+
+# Configure tesseract executable path
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # Add parent directory to sys.path to import retrieve.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -96,6 +101,7 @@ async def chat(
     has_attachment = False
     attachment_name = None
     pdf_context = ""
+    image_ocr_text = ""
     image_parts = None
 
     # Handle uploaded file
@@ -116,6 +122,17 @@ async def chat(
             attachment_name = file.filename
             try:
                 file_bytes = await file.read()
+                
+                # Extract text using Tesseract OCR
+                try:
+                    img = Image.open(io.BytesIO(file_bytes))
+                    extracted_text = pytesseract.image_to_string(img)
+                    if extracted_text.strip():
+                        image_ocr_text = extracted_text.strip()
+                        print(f"Extracted {len(image_ocr_text)} chars using OCR")
+                except Exception as ocr_err:
+                    print(f"Error extracting text from image with OCR: {ocr_err}")
+                
                 image_parts = [
                     {
                         "mime_type": file.content_type or "image/jpeg",
@@ -179,6 +196,10 @@ async def chat(
 
         if pdf_context:
             prompt_parts.append(f"--- Attached PDF Content ---\n{pdf_context}\n--- End of PDF ---\n")
+        elif image_ocr_text:
+            prompt_parts.append(f"--- Extracted Image Text (OCR) ---\n{image_ocr_text}\n--- End of OCR Text ---\n")
+            if rag_context:
+                prompt_parts.append(f"--- Knowledge Base Context ---\n{rag_context}\n--- End of Knowledge Base ---\n")
         elif rag_context:
             prompt_parts.append(f"--- Knowledge Base Context ---\n{rag_context}\n--- End of Knowledge Base ---\n")
 

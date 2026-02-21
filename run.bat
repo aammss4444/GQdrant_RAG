@@ -1,6 +1,6 @@
 @echo off
 echo Starting Backend Server...
-start "Backend Server" cmd /k "uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000"
+start "Backend Server" cmd /k ".\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000"
 
 echo Starting Frontend Server...
 cd frontend

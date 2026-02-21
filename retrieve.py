@@ -23,15 +23,19 @@ client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60)
 # Collection Configuration
 COLLECTION_NAME = "ai_structured_collection_v2"
 EMBEDDING_MODEL = "models/gemini-embedding-001"
+VECTOR_SIZE = 768
 
 def get_embedding(text):
     """Generates embedding for the given text using Gemini API."""
     result = genai.embed_content(
         model=EMBEDDING_MODEL,
         content=text,
-        task_type="retrieval_query"
+        task_type="retrieval_query",
     )
-    return result['embedding']
+    embedding = result['embedding']
+    if len(embedding) > VECTOR_SIZE:
+        embedding = embedding[:VECTOR_SIZE]
+    return embedding
 
 def search(query, limit=3):
     """Searches the Qdrant collection for the query."""

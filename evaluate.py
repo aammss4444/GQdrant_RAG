@@ -21,8 +21,9 @@ genai.configure(api_key=GOOGLE_API_KEY)
 client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60)
 
 # Collection Configuration
-COLLECTION_NAME = "ai_structured_collection"
+COLLECTION_NAME = "ai_structured_collection_v2"
 EMBEDDING_MODEL = "models/gemini-embedding-001"
+VECTOR_SIZE = 768
 
 # --- Golden Dataset ---
 # A list of queries and expected keywords that MUST be present in the retrieved chunks/source.
@@ -56,9 +57,12 @@ def get_embedding(text):
     result = genai.embed_content(
         model=EMBEDDING_MODEL,
         content=text,
-        task_type="retrieval_query"
+        task_type="retrieval_query",
     )
-    return result['embedding']
+    embedding = result['embedding']
+    if len(embedding) > VECTOR_SIZE:
+        embedding = embedding[:VECTOR_SIZE]
+    return embedding
 
 def evaluate(k=3):
     """Evaluates retrieval accuracy (Hit Rate & MRR) @ K."""
