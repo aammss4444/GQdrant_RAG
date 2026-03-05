@@ -28,7 +28,7 @@ client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60)
 COLLECTION_NAME = "ai_structured_collection_v2"
 EMBEDDING_MODEL = "models/gemini-embedding-001"
 VECTOR_SIZE = 768 
-PDF_PATH = "Artificial_Intelligence_Expanded_Detailed_Report.pdf"
+PDF_PATH = "data/Artificial_Intelligence_Expanded_Detailed_Report.pdf"
 
 CHUNK_SIZE = 450
 CHUNK_OVERLAP = 80
