@@ -1,0 +1,95 @@
+# Project Architecture: GQdrant RAG
+
+This document outlines the system architecture and data flow of the GQdrant RAG application.
+
+## System Overview
+
+The application follows a modern full-stack architecture with a decoupled frontend and backend, integrated with both relational and vector databases.
+
+```mermaid
+graph TD
+    subgraph Client ["Frontend (React + Vite)"]
+        UI["Chat UI / Dashboard"]
+        Auth_FE["Session Mgmt (JWT)"]
+    end
+
+    subgraph Server ["Backend (FastAPI)"]
+        API["API Layer (main.py)"]
+        RAG["RAG Engine"]
+        Auth_BE["Auth Logic (Bcrypt/JWT)"]
+    end
+
+    subgraph Data ["Storage Layer"]
+        PG[("PostgreSQL\n(Metadata/History)")]
+        Qdrant[("Qdrant\n(Vector Store)")]
+    end
+
+    subgraph External ["External Services"]
+        Gemini[("Google Gemini API\n(Embeddings & Generation)")]
+        OCR[("Tesseract OCR\n(Image Extraction)")]
+    end
+
+    subgraph Pipeline ["Ingestion Pipeline"]
+        Script["ingest_structured.py"]
+        PDF["PDF Documents"]
+    end
+
+    %% Flow: Ingestion
+    PDF --> Script
+    Script --> OCR --> Script
+    Script --> Gemini -- "Embeddings" --> Script
+    Script --> Qdrant
+
+    %% Flow: Client-Server
+    UI <--> API
+    Auth_FE <--> Auth_BE
+
+    %% Flow: Backend Logic
+    API <--> Auth_BE
+    API <--> RAG
+    Auth_BE <--> PG
+    API <--> PG
+
+    %% Flow: RAG Flow
+    RAG -- "Search Query" --> Gemini
+    Gemini -- "Vector" --> RAG
+    RAG -- "Vector Search" --> Qdrant
+    Qdrant -- "Context Chunks" --> RAG
+    RAG -- "Context + History + Query" --> Gemini
+    Gemini -- "Final Response" --> RAG
+    RAG --> API
+```
+
+## Component Breakdowns
+
+### 1. Frontend
+- **Technology**: React, TailwindCSS, Vite.
+- **Responsibilities**: 
+    - User interface for chatting and document management.
+    - Handling authentication state and storing tokens in `localStorage`.
+    - API interaction via a centralized [api.js](file:///d:/Qdrant/frontend/src/api.js) using Axios.
+
+### 2. Backend
+- **Technology**: FastAPI (Python).
+- **Responsibilities**:
+    - **API Endpoints**: CRUD operations for chat history and user profiles.
+    - **Authentication**: JWT-based security using `python-jose` and `bcrypt`.
+    - **RAG Orchestration**: Coordinating the flow between User Query -> Embedding -> Vector Search -> Prompt Generation.
+
+### 3. Database Layer
+- **PostgreSQL**: Stores relational data (Users, Conversations, Messages) via SQLAlchemy ORM.
+- **Qdrant**: A high-performance vector database used for storing document embeddings and performing semantic search.
+
+### 4. Ingestion Pipeline
+- **pdfplumber**: Extracts structured text from PDF files.
+- **PyTesseract**: Provides OCR capabilities to extract text from scanned images within PDFs.
+- **Embeddings**: Uses `google-generativeai` (Gemini) to convert text chunks into 768-dimensional vectors.
+
+### 5. RAG Flow (Retrieval-Augmented Generation)
+1. **User Query**: User sends a message via the frontend.
+2. **Retrieval**:
+    - Backend converts query to a vector using Gemini.
+    - Qdrant performs a similarity search to find the most relevant document chunks.
+3. **Augmentation**: Relevant chunks + Chat history from PostgreSQL are combined into a system prompt.
+4. **Generation**: Gemini generates a naturally phrased response based on the context.
+5. **Persistence**: The response is saved to PostgreSQL and returned to the client.

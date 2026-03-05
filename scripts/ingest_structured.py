@@ -1,6 +1,9 @@
 import os
+import argparse
 import pdfplumber
 import google.generativeai as genai
+import pytesseract
+from PIL import Image
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
 from dotenv import load_dotenv
@@ -18,6 +21,9 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise ValueError("GOOGLE_API_KEY is missing in .env file.")
 
+# Configure tesseract executable path
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
 # Initialize Gemini
 genai.configure(api_key=GOOGLE_API_KEY)
 
@@ -28,7 +34,6 @@ client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60)
 COLLECTION_NAME = "ai_structured_collection_v2"
 EMBEDDING_MODEL = "models/gemini-embedding-001"
 VECTOR_SIZE = 768 
-PDF_PATH = "data/Artificial_Intelligence_Expanded_Detailed_Report.pdf"
 
 CHUNK_SIZE = 450
 CHUNK_OVERLAP = 80
@@ -42,14 +47,12 @@ def get_embedding(text, retries=5):
                 content=text,
                 task_type="retrieval_document"
             )
-            # Check if result is valid
             if 'embedding' in result:
                 embedding = result['embedding']
                 if len(embedding) > VECTOR_SIZE:
                     embedding = embedding[:VECTOR_SIZE]
                 return embedding
             else:
-                # Handle cases where result might be empty (e.g. safety filter)
                 print(f"Warning: No embedding returned for text: {text[:50]}...")
                 return None
         except Exception as e:
@@ -75,71 +78,109 @@ def chunk_text(text, chunk_size, overlap):
         end = start + chunk_size
         chunk = text[start:end]
         chunks.append(chunk)
-        
-        # Move start forward by (chunk_size - overlap)
         start += (chunk_size - overlap)
     
     return chunks
 
-def extract_text_from_pdf(pdf_path):
-    """Extracts raw text from PDF."""
+def extract_text_and_ocr(pdf_path, use_ocr=True):
+    """Extracts raw text and performs OCR if needed."""
     full_text = ""
     with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            try:
-                text = page.extract_text()
-                if text:
-                    full_text += text + "\n"
-            except Exception as e:
-                print(f"Error extracting text from page: {e}")
+        for i, page in enumerate(pdf.pages):
+            print(f"Processing page {i+1}/{len(pdf.pages)}...")
+            
+            # Try direct text extraction
+            text = page.extract_text()
+            if text:
+                full_text += text + "\n"
+            
+            # Check for images or low text count to trigger OCR
+            if use_ocr and (len(page.images) > 0 or (text and len(text) < 100)):
+                print(f"  OCR triggered for page {i+1}...")
+                try:
+                    # Render page to image
+                    with page.to_image(resolution=300) as img:
+                        pil_img = img.original
+                        ocr_text = pytesseract.image_to_string(pil_img)
+                        if ocr_text:
+                            print(f"  OCR extracted {len(ocr_text)} characters.")
+                            full_text += "\n--- OCR Data ---\n" + ocr_text + "\n"
+                except Exception as e:
+                    print(f"  OCR failed for page {i+1}: {e}")
+            
     return full_text
 
 def main():
-    print(f"Processing {PDF_PATH} with Chunk Size {CHUNK_SIZE}, Overlap {CHUNK_OVERLAP}...")
+    parser = argparse.ArgumentParser(description="Ingest PDF into Qdrant")
+    parser.add_argument("pdf_path", nargs="?", default="data/ocr-test-doc.pdf", help="Path to the PDF file")
+    parser.add_argument("--append", action="store_true", help="Append to existing collection instead of recreating it")
+    parser.add_argument("--no-ocr", action="store_false", dest="ocr", help="Disable OCR even if images found")
+    parser.set_defaults(ocr=True)
+    args = parser.parse_args()
+
+    pdf_path = args.pdf_path
+    if not os.path.exists(pdf_path):
+        print(f"Error: File not found: {pdf_path}")
+        return
+
+    print(f"Processing {pdf_path} (OCR: {args.ocr}) with Chunk Size {CHUNK_SIZE}, Overlap {CHUNK_OVERLAP}...")
     
-    # 1. Extract
-    print("Extracting text from PDF...")
-    raw_text = extract_text_from_pdf(PDF_PATH)
-    print(f"Extracted {len(raw_text)} characters.")
+    # 1. Extract & OCR
+    print("Extracting text and performing OCR...")
+    raw_text = extract_text_and_ocr(pdf_path, use_ocr=args.ocr)
+    print(f"Total extracted {len(raw_text)} characters.")
     
+    if len(raw_text) == 0:
+        print("Error: No text extracted. Aborting.")
+        return
+
     # 2. Chunk
     print("Chunking text...")
     text_chunks = chunk_text(raw_text, CHUNK_SIZE, CHUNK_OVERLAP)
     print(f"Created {len(text_chunks)} chunks.")
     
-    # 3. Re-create Collection
-    if client.collection_exists(COLLECTION_NAME):
+    # 3. Collection Management
+    exists = client.collection_exists(COLLECTION_NAME)
+    if exists and not args.append:
         print(f"Deleting existing collection: {COLLECTION_NAME}")
         client.delete_collection(COLLECTION_NAME)
+        exists = False
 
-    print(f"Creating collection: {COLLECTION_NAME} with dimension {VECTOR_SIZE}")
-    client.create_collection(
-        collection_name=COLLECTION_NAME,
-        vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
-    )
+    if not exists:
+        print(f"Creating collection: {COLLECTION_NAME} with dimension {VECTOR_SIZE}")
+        client.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+        )
 
     # 4. Generate Embeddings & Upsert
     points = []
     print("Generating embeddings...")
     
-    BATCH_SIZE = 20 # Smaller batch size to be safe
+    BATCH_SIZE = 20
     
+    current_count = 0
+    if args.append:
+        try:
+            collection_info = client.get_collection(COLLECTION_NAME)
+            current_count = collection_info.points_count
+            print(f"Starting with index {current_count}")
+        except Exception:
+            pass
+
     for idx, chunk_text_content in enumerate(text_chunks):
         try:
-            # Contextualize? Just strict chunking requested.
-            # But let's keep it clean.
             embedding = get_embedding(chunk_text_content)
             
             if embedding:
                 point = PointStruct(
-                    id=idx,
+                    id=current_count + idx,
                     vector=embedding,
-                    payload={"text": chunk_text_content, "source": PDF_PATH}
+                    payload={"text": chunk_text_content, "source": pdf_path}
                 )
                 points.append(point)
                 
-                # Moderate sleep to avoid bursting too hard
-                time.sleep(2) 
+                time.sleep(1)
             else:
                 print(f"Skipping chunk {idx} due to embedding failure.")
 
@@ -152,13 +193,6 @@ def main():
     # 5. Upsert
     if points:
         print(f"Upserting {len(points)} points to Qdrant...")
-        # DEBUG: Check embedding dimension
-        if points:
-            dim = len(points[0].vector)
-            print(f"DEBUG: Embedding dimension: {dim}")
-            if dim != VECTOR_SIZE:
-                print(f"ERROR: Dimension mismatch! Expected {VECTOR_SIZE}, got {dim}")
-        
         for i in range(0, len(points), BATCH_SIZE):
             batch = points[i:i + BATCH_SIZE]
             try:
@@ -170,9 +204,9 @@ def main():
                 print(f"Upserted batch {i // BATCH_SIZE + 1}")
             except Exception as e:
                 print(f"Error upserting batch {i // BATCH_SIZE + 1}: {e}")
-            time.sleep(1) # Sleep between upserts
+            time.sleep(1)
             
-        print("Done! Collection populated.")
+        print("Done! Collection updated.")
     else:
         print("No points to upsert.")
 

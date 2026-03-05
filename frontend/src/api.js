@@ -19,6 +19,21 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
+// Add a response interceptor to handle 401 errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && error.response.status === 401) {
+            // Token is invalid (e.g. database reset)
+            localStorage.removeItem('token');
+            if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 export const login = async (email, password) => {
     const formData = new URLSearchParams();
     formData.append('username', email); // OAuth2 expects 'username'
